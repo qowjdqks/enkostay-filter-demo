@@ -22,7 +22,7 @@ VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_값
 
 1. [Supabase](https://supabase.com/dashboard)에서 프로젝트를 만듭니다.
 2. Supabase **SQL Editor**에서 `supabase/migrations/202611210001_user_workspace.sql` 내용을 실행합니다. 사용자별 RLS 정책과 기본 프로필 생성 트리거가 설정됩니다.
-3. **Authentication → URL Configuration**에서 Site URL을 `https://qowjdqks.github.io/enkostay-filter-demo/`로 설정하고, Redirect URLs에 `https://qowjdqks.github.io/enkostay-filter-demo/**`와 로컬 개발 주소 `http://localhost:5173/**`를 추가합니다. 이메일 인증은 Authentication의 Email provider 설정을 확인합니다.
+3. **Authentication → URL Configuration**은 `supabase/config.toml`의 Site URL과 Redirect URLs를 반영합니다. 이메일 인증은 Authentication의 Email provider 설정을 확인합니다.
 4. Mac의 VS Code 터미널에서 프로젝트 폴더를 연 뒤 다음 명령을 실행합니다. `PROJECT_REF`는 Supabase **Project Settings → General**에 표시된 프로젝트 ID입니다.
 
    ```sh
