@@ -26,3 +26,7 @@ max_client_conn = 200
 
 [storage.vector]
 enabled = false
+
+[functions.admin-users]
+# The handler validates the session with auth.getUser(token) and checks admin_users.
+verify_jwt = false
