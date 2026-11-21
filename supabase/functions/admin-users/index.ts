@@ -43,6 +43,73 @@ Deno.serve(async (request) => {
   if (input.action === 'check') return respond({ isAdmin: Boolean(membership) })
   if (membershipError || !membership) return respond({ error: '관리자 권한이 없습니다.' }, 403)
 
+  if (input.action === 'analytics') {
+    const since = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString()
+    await admin.from('activity_events').delete().lt('created_at', since)
+    const maxEvents = input.userId ? 150 : 10000
+    const rows: Array<{ id: number; user_id: string; event_type: string; payload: Record<string, unknown>; created_at: string }> = []
+    while (rows.length < maxEvents) {
+      const pageSize = Math.min(1000, maxEvents - rows.length)
+      let query = admin.from('activity_events').select('id,user_id,event_type,payload,created_at').gte('created_at', since).order('created_at', { ascending: false }).order('id', { ascending: false }).range(rows.length, rows.length + pageSize - 1)
+      if (input.userId) query = query.eq('user_id', input.userId)
+      const { data: page, error } = await query
+      if (error) return respond({ error: '활동 분석을 불러오지 못했습니다.' }, 500)
+      rows.push(...(page ?? []))
+      if (!page || page.length < pageSize) break
+    }
+    const byType: Record<string, number> = {}
+    const categoryUsage: Record<string, number> = {}
+    const optionUsage: Record<string, number> = {}
+    const memberActivity: Record<string, { count: number; lastActivityAt: string }> = {}
+    let zeroResults = 0
+    let searchApplications = 0
+    let resultTotal = 0
+    let resultSamples = 0
+    for (const event of rows) {
+      byType[event.event_type] = (byType[event.event_type] ?? 0) + 1
+      memberActivity[event.user_id] ??= { count: 0, lastActivityAt: event.created_at }
+      memberActivity[event.user_id].count += 1
+      if (event.event_type === 'search_applied') {
+        searchApplications += 1
+        const resultCount = Number(event.payload?.resultCount)
+        if (Number.isFinite(resultCount)) {
+          resultTotal += resultCount
+          resultSamples += 1
+          if (resultCount === 0) zeroResults += 1
+        }
+      }
+      const category = event.payload?.category
+      if (event.event_type === 'filter_opened' && typeof category === 'string') categoryUsage[category] = (categoryUsage[category] ?? 0) + 1
+      const option = event.payload?.option
+      if (typeof option === 'string' && event.payload?.selected === true) optionUsage[option] = (optionUsage[option] ?? 0) + 1
+    }
+
+    const { data: authData, error: authError } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 })
+    if (authError) return respond({ error: '회원별 활동 정보를 불러오지 못했습니다.' }, 500)
+    const members = authData.users.map((user) => ({
+      id: user.id,
+      email: user.email,
+      activityCount: memberActivity[user.id]?.count ?? 0,
+      lastActivityAt: memberActivity[user.id]?.lastActivityAt ?? null,
+    })).sort((a, b) => b.activityCount - a.activityCount)
+
+    return respond({
+      since,
+      truncated: !input.userId && rows.length === maxEvents,
+      stats: {
+        eventsTotal: rows.length,
+        searchApplications,
+        zeroResultRate: searchApplications ? zeroResults / searchApplications : 0,
+        averageResults: resultSamples ? Math.round(resultTotal / resultSamples) : 0,
+        byType,
+        categoryUsage,
+        optionUsage,
+      },
+      members,
+      events: rows,
+    })
+  }
+
   if (input.action === 'list') {
     const { data, error } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 })
     if (error) return respond({ error: '회원 목록을 불러오지 못했습니다.' }, 500)
